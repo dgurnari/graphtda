@@ -21,6 +21,8 @@ class FilteredGraph:
         """
         self.Graph = G
 
+        self.x_label = "x"
+        self.y_label = "y"
 
         if filtration_function:
             self.Graph = filtration_function(G)
@@ -155,20 +157,20 @@ class FilteredGraph:
         simplices = []
         appearances = []
         for node in self.Graph.nodes:
-            simplices.append(list(node))
-            appearances.append(node["appearance"])
+            simplices.append([node])
+            appearances.append(self.Graph.nodes[node]["appearance"])
 
         for edge in self.Graph.edges:
             simplices.append(edge)
-            appearances.append(edge["appearance"])
+            appearances.append(self.Graph.edges[edge]["appearance"])
 
         return rivet.Bifiltration(x_label = self.x_label,
                               y_label=self.y_label,
                               simplices = simplices,
                               appearances = appearances)
 
-    def compute_bipersistence(self, dim =0):
-        self.betti = rivet.betti(self.rivet_bifiltration(),homology=dim)
+    def compute_bipersistence(self, dim =0, x=0, y=0):
+        self.betti = rivet.betti(self.rivet_bifiltration(),homology=dim, x=x,y=y)
         return self.betti
     
     def graded_rank(self):
