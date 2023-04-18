@@ -4,6 +4,7 @@ import numpy as np
 import networkx as nx
 from pyrivet import rivet
 from pyrivet import hilbert_distance
+import ot, ot.bregman
 
 
 class FilteredGraph:
@@ -186,12 +187,12 @@ class FilteredGraph:
 
 def degree_filtration(G):
     for n, degree in G.degree():
-        G.nodes[n]["appearance"] = (degree,)
+        G.nodes[n]["appearance"] = [(degree,)]
 
     for u, v in G.edges:
-        d_u = G.nodes[u]["appearance"][0]
-        d_v = G.nodes[v]["appearance"][0]
-        G.edges[(u, v)]["appearance"] = (max(d_u, d_v),)
+        d_u = G.nodes[u]["appearance"][0][0]
+        d_v = G.nodes[v]["appearance"][0][0]
+        G.edges[(u, v)]["appearance"] = [(max(d_u, d_v),)]
 
     return G
 
@@ -215,5 +216,70 @@ def HKS_bifiltration(G, grid=np.linspace(0,10,101)):
         G.nodes[n]["appearance"] = [(sum([np.exp(-t*values[i])*vectors[i][n]**2 for i in range(len(values))]),t) for t in grid]
     for u,v in G.edges:
         G.edges[u, v]["appearance"] = [(max([G.nodes[u]["appearance"][i][0],G.nodes[v]["appearance"][i][0]]),grid[i]) for i in range(len(grid))]
+
+    return G
+
+def product_bifiltration(G1, G2):
+    G = nx.Garph()
+    G.add_edges_from(G1.edges)
+    for n in G.nodes:
+        G.nodes[n]["appearance"] = (G1.nodes[n]["appearance"],G2.nodes[n]["appearance"])
+    
+    for e in G.edges:
+        G.edges[e]["appearance"] = (G1.edges[e]["appearance"],G2.edges[e]["appearance"])
+
+    return G
+
+def interlevel_bifiltration(G, func):#TODO
+    return G
+
+def hks(G, t):
+    L = nx.normalized_laplacian_matrix(G)
+    values, vectors = np.linalg.eigh(L.A)
+    for n in G.nodes:
+        G.nodes[n]["appearance"] = [(sum([np.exp(-t*values[i])*vectors[i][n]**2 for i in range(len(values))]),)]
+    for u,v in G.edges:
+        G.edges[u, v]["appearance"] = [(max([G.nodes[u]["appearance"][0][0],G.nodes[v]["appearance"][0][0]]),)]
+
+    return G
+
+def lazy_random_walk_measure(G, alpha, u):
+    values = np.zeros_like(G.nodes, dtype=float)
+    values[u] = alpha
+    for v in G.neighbors(u):
+        values[v] = (1-alpha)/G.degree[u]
+    return values
+
+def ollivier_ricci_curvature(G, alpha, reg = 0):
+    filtration = {}
+    for v in G.nodes:
+        G.nodes[v]["appearance"] = [(1000000,)]
+
+    for e in G.edges:
+        M = np.zeros((len(G.nodes),len(G.nodes)))
+        p = dict(nx.shortest_path_length(G))
+        for i in range(len(G.nodes)):
+            for j in range(i):
+                M[i,j] = p[i][j]
+        M = M + M.T    
+        if reg ==0:
+            Wd = ot.emd2(lazy_random_walk_measure(G,alpha,e[0]), lazy_random_walk_measure(G, alpha, e[1]), M)
+        else:
+            Wd = ot.bregman.sinkhorn(lazy_random_walk_measure(G,alpha,e[0]), lazy_random_walk_measure(G, alpha, e[1]), M, reg)
+        filtration.update({e:1-Wd})
+        if 1-Wd < G.nodes[e[0]]["appearance"][0][0]:
+            G.nodes[e[0]]["appearance"] = [(1-Wd,)]
+        if 1-Wd < G.nodes[e[1]]["appearance"][0][0]:
+            G.nodes[e[1]]["appearance"] = [(1-Wd,)]
+
+    return G
+
+def forman_ricci_curvature(G):
+    for v in G.nodes:
+        G.nodes[v]["appearance"] =[(-1,)]
+
+    for e in G.edges:
+        n_triangles = len(set(G.neighbors(e[0]))&set(G.neighbors(e[1])))
+        G.edges[e]["appearance"] = [(4-G.degree[e[0]]-G.degree[e[1]]+3*n_triangles,)]
 
     return G
