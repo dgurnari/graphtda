@@ -2,6 +2,8 @@
 
 import numpy as np
 import networkx as nx
+from pyrivet import rivet
+from pyrivet import hilbert_distance
 
 
 class FilteredGraph:
@@ -18,6 +20,7 @@ class FilteredGraph:
             the filtration function, by default None
         """
         self.Graph = G
+
 
         if filtration_function:
             self.Graph = filtration_function(G)
@@ -44,9 +47,9 @@ class FilteredGraph:
         is_filtration_ok = True
 
         for u, v, d in self.Graph.edges(data=True):
-            multif_e = d["filtration"]
-            multif_u = self.Graph.nodes[u]["filtration"]
-            multif_v = self.Graph.nodes[v]["filtration"]
+            multif_e = d["appearance"]
+            multif_u = self.Graph.nodes[u]["appearance"]
+            multif_v = self.Graph.nodes[v]["appearance"]
 
             for f_u, f_v, f_e in zip(multif_u, multif_v, multif_e):
                 if (f_e < f_u) or (f_e < f_v):
@@ -81,9 +84,9 @@ class FilteredGraph:
             _description_, by default 1
         """
         for u, v, d in self.Graph.edges(data=True):
-            multif_e = d["filtration"]
-            multif_u = self.Graph.nodes[u]["filtration"]
-            multif_v = self.Graph.nodes[v]["filtration"]
+            multif_e = d["appearance"]
+            multif_u = self.Graph.nodes[u]["appearance"]
+            multif_v = self.Graph.nodes[v]["appearance"]
 
             for i, f_u, f_v, f_e in enumerate(zip(multif_u, multif_v, multif_e)):
                 if (f_e < f_u) or (f_e < f_v):
@@ -98,32 +101,32 @@ class FilteredGraph:
 
                     if increase_edges:
                         # increases the edge value
-                        self.Graph.edges[(u, v)]["filtration"][i] = (
+                        self.Graph.edges[(u, v)]["appearance"][i] = (
                             max(f_u, f_v) + value
                         )
                         if verbose:
                             print(
                                 "now f({},{}) = {}".format(
-                                    u, v, self.Graph.edges[(u, v)]["filtration"]
+                                    u, v, self.Graph.edges[(u, v)]["appearance"]
                                 )
                             )
                     else:
                         # decreases the nodes values
                         if f_e < f_u:
-                            self.Graph.nodes[u]["filtration"][i] = f_e - value
+                            self.Graph.nodes[u]["appearance"][i] = f_e - value
                             if verbose:
                                 print(
                                     "now f({}) = {}".format(
-                                        u, self.Graph.nodes[u]["filtration"]
+                                        u, self.Graph.nodes[u]["appearance"]
                                     )
                                 )
 
                         if f_e < f_v:
-                            self.Graph.nodes[v]["filtration"][i] = f_e - value
+                            self.Graph.nodes[v]["appearance"][i] = f_e - value
                             if verbose:
                                 print(
                                     "now f({}) = {}".format(
-                                        v, self.Graph.nodes[v]["filtration"]
+                                        v, self.Graph.nodes[v]["appearance"]
                                     )
                                 )
 
@@ -131,11 +134,11 @@ class FilteredGraph:
         ECP = dict()
 
         for node in self.Graph.nodes():
-            f = self.Graph.nodes[node]["filtration"]
+            f = self.Graph.nodes[node]["appearance"]
             ECP[f] = ECP.get(f, 0) + 1
 
         for edge in self.Graph.edges():
-            f = self.Graph.edges[edge]["filtration"]
+            f = self.Graph.edges[edge]["appearance"]
             ECP[f] = ECP.get(f, 0) - 1
 
         # remove the contributions that are 0
@@ -147,28 +150,68 @@ class FilteredGraph:
             del ECP[key]
 
         return sorted(list(ECP.items()), key=lambda x: x[0])
+    
+    def rivet_bifiltration(self):
+        simplices = []
+        appearances = []
+        for node in self.Graph.nodes:
+            simplices.append(list(node))
+            appearances.append(node["appearance"])
+
+        for edge in self.Graph.edges:
+            simplices.append(edge)
+            appearances.append(edge["appearance"])
+
+        return rivet.Bifiltration(x_label = self.x_label,
+                              y_label=self.y_label,
+                              simplices = simplices,
+                              appearances = appearances)
+
+    def compute_bipersistence(self, dim =0):
+        self.betti = rivet.betti(self.rivet_bifiltration(),homology=dim)
+        return self.betti
+    
+    def graded_rank(self):
+        if self.betti is None:
+            print("compute bipersistence first!")
+        else:
+            return self.betti.graded_rank
+
+    def hilbert_function(self):
+        return hilbert_distance.betti_to_splitmat(self.betti).mat
+
 
 
 def degree_filtration(G):
     for n, degree in G.degree():
-        G.nodes[n]["filtration"] = (degree,)
+        G.nodes[n]["appearance"] = (degree,)
 
     for u, v in G.edges:
-        d_u = G.nodes[u]["filtration"][0]
-        d_v = G.nodes[v]["filtration"][0]
-        G.edges[(u, v)]["filtration"] = (max(d_u, d_v),)
+        d_u = G.nodes[u]["appearance"][0]
+        d_v = G.nodes[v]["appearance"][0]
+        G.edges[(u, v)]["appearance"] = (max(d_u, d_v),)
 
     return G
 
 
 def in_out_degree_bifiltration(D):
     for n in D.nodes:
-        D.nodes[n]["filtration"] = (D.in_degree(n), D.out_degree(n))
+        D.nodes[n]["appearance"] = (D.in_degree(n), D.out_degree(n))
 
     for u, v in D.edges:
-        u_in, u_out = D.nodes[u]["filtration"]
-        v_in, v_out = D.nodes[v]["filtration"]
+        u_in, u_out = D.nodes[u]["appearance"]
+        v_in, v_out = D.nodes[v]["appearance"]
 
-        D.edges[u, v]["filtration"] = (max(u_in, v_in), max(u_out, v_out))
+        D.edges[u, v]["appearance"] = (max(u_in, v_in), max(u_out, v_out))
 
     return D
+
+def HKS_bifiltration(G, grid=np.linspace(0,10,101)):
+    L = nx.normalized_laplacian_matrix(G)
+    values, vectors = np.linalg.eigh(L.A)
+    for n in G.nodes:
+        G.nodes[n]["appearance"] = [(sum([np.exp(-t*values[i])*vectors[i][n]**2 for i in range(len(values))]),t) for t in grid]
+    for u,v in G.edges:
+        G.edges[u, v]["appearance"] = [(max([G.nodes[u]["appearance"][i][0],G.nodes[v]["appearance"][i][0]]),grid[i]) for i in range(len(grid))]
+
+    return G
