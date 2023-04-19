@@ -10,7 +10,7 @@ import ot, ot.bregman
 class FilteredGraph:
     """Main class for Filtered Graphs. Basically, a NetworkX graph with filtration parameters on nodes and edges."""
 
-    def __init__(self, G, filtration_function=None):
+    def __init__(self, G, filtration_function=None, **kwargs):
         """_summary_
 
         Parameters
@@ -20,15 +20,15 @@ class FilteredGraph:
         filtration_function : callable, optional
             the filtration function, by default None
         """
-        self.Graph = G
-
+        self.Graph = nx.Graph()
+        self.Graph.add_edges_from(G.edges)
         self.x_label = "x"
         self.y_label = "y"
 
         if filtration_function:
-            self.Graph = filtration_function(G)
-        else:
-            self.Graph = G
+            self.Graph = filtration_function(self.Graph, **kwargs)
+        #else:
+        #    self.Graph = G
 
         self.check_filtration()
 
@@ -162,7 +162,7 @@ class FilteredGraph:
             appearances.append(self.Graph.nodes[node]["appearance"])
 
         for edge in self.Graph.edges:
-            simplices.append(edge)
+            simplices.append(list(edge))
             appearances.append(self.Graph.edges[edge]["appearance"])
 
         return rivet.Bifiltration(x_label = self.x_label,
@@ -219,14 +219,15 @@ def HKS_bifiltration(G, grid=np.linspace(0,10,101)):
 
     return G
 
-def product_bifiltration(G1, G2):
-    G = nx.Garph()
-    G.add_edges_from(G1.edges)
+def product_bifiltration(G, G1, G2):
+    #if G != G1.Graph or G != G2.Graph:
+    #    print("Error: not the same underlying graph")
+    #    return
     for n in G.nodes:
-        G.nodes[n]["appearance"] = (G1.nodes[n]["appearance"],G2.nodes[n]["appearance"])
+        G.nodes[n]["appearance"] = [(G1.Graph.nodes[n]["appearance"][0][0],G2.Graph.nodes[n]["appearance"][0][0])]
     
     for e in G.edges:
-        G.edges[e]["appearance"] = (G1.edges[e]["appearance"],G2.edges[e]["appearance"])
+        G.edges[e]["appearance"] = [(G1.Graph.edges[e]["appearance"][0][0],G2.Graph.edges[e]["appearance"][0][0])]
 
     return G
 
@@ -251,7 +252,6 @@ def lazy_random_walk_measure(G, alpha, u):
     return values
 
 def ollivier_ricci_curvature(G, alpha, reg = 0):
-    filtration = {}
     for v in G.nodes:
         G.nodes[v]["appearance"] = [(1000000,)]
 
@@ -266,7 +266,7 @@ def ollivier_ricci_curvature(G, alpha, reg = 0):
             Wd = ot.emd2(lazy_random_walk_measure(G,alpha,e[0]), lazy_random_walk_measure(G, alpha, e[1]), M)
         else:
             Wd = ot.bregman.sinkhorn(lazy_random_walk_measure(G,alpha,e[0]), lazy_random_walk_measure(G, alpha, e[1]), M, reg)
-        filtration.update({e:1-Wd})
+        G.edges[e]["appearance"] = [(1-Wd,)]
         if 1-Wd < G.nodes[e[0]]["appearance"][0][0]:
             G.nodes[e[0]]["appearance"] = [(1-Wd,)]
         if 1-Wd < G.nodes[e[1]]["appearance"][0][0]:
