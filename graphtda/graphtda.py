@@ -24,6 +24,7 @@ class FilteredGraph:
         self.Graph.add_edges_from(G.edges)
         self.x_label = "x"
         self.y_label = "y"
+        self.xreverse = False
 
         if filtration_function:
             self.Graph = filtration_function(self.Graph, **kwargs)
@@ -168,7 +169,8 @@ class FilteredGraph:
         return rivet.Bifiltration(x_label = self.x_label,
                               y_label=self.y_label,
                               simplices = simplices,
-                              appearances = appearances)
+                              appearances = appearances,
+                              xreverse=self.xreverse)
 
     def compute_bipersistence(self, dim =0, x=0, y=0):
         self.betti = rivet.betti(self.rivet_bifiltration(),homology=dim, x=x,y=y)
@@ -231,8 +233,29 @@ def product_bifiltration(G, G1, G2):
 
     return G
 
-def interlevel_bifiltration(G, func):#TODO
-    return G
+def interlevel_bifiltration(G, FG, keep_nodes = True):
+    bifilG = nx.Graph()
+    bifilG.add_edges_from(G.edges)
+    if keep_nodes:#nodes appear on diagonal, edges as soon as both endpoints are present
+        for n in G.nodes:
+            bifilG.nodes[n]["appearance"] = [(FG.Graph.nodes[n]["appearance"][0][0],FG.Graph.nodes[n]["appearance"][0][0])]
+
+
+        for e in G.edges:
+            vals = [FG.Graph.nodes[e[i]]["appearance"][0][0] for i in range(2)]
+            bifilG.edges[e]["appearance"] = [(min(vals),max(vals))]
+
+    else:#edges appear on the diagonal, nodes as soon as required for edge
+        for e in G.edges:
+            bifilG.edges[e]["appearance"] = [(FG.Graph.edges[e]["appearance"][0][0],FG.Graph.edges[e]["appearance"][0][0])]
+
+        for n in G.nodes:
+            vals = set()
+            for e in nx.edges(G,n):
+                vals.add(FG.Graph.edges[e]["appearance"][0][0])
+            bifilG.nodes[n]["appearance"] = [(val,val) for val in vals]
+
+    return bifilG
 
 def hks(G, t):
     L = nx.normalized_laplacian_matrix(G)
