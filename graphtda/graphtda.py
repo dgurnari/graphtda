@@ -138,11 +138,11 @@ class FilteredGraph:
         ECP = dict()
 
         for node in self.Graph.nodes():
-            f = self.Graph.nodes[node]["appearance"]
+            f = self.Graph.nodes[node]["appearance"][0]
             ECP[f] = ECP.get(f, 0) + 1
 
         for edge in self.Graph.edges():
-            f = self.Graph.edges[edge]["appearance"]
+            f = self.Graph.edges[edge]["appearance"][0]
             ECP[f] = ECP.get(f, 0) - 1
 
         # remove the contributions that are 0
