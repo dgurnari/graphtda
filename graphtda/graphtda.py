@@ -11,14 +11,17 @@ class FilteredGraph:
     """Main class for Filtered Graphs. Basically, a NetworkX graph with filtration parameters on nodes and edges."""
 
     def __init__(self, G, filtration_function=None, **kwargs):
-        """_summary_
+        """Creates a filtered version of G without changing G.
 
         Parameters
         ----------
         G : NetworkX Graph or DiGraph
             the input graph, can be directed or not.
         filtration_function : callable, optional
-            the filtration function, by default None
+            the filtration function, by default None.
+            Use one of the functions specified below or create your own.
+        **kwargs : dict
+            arguments to be passed to the filtration_function.
         """
         self.Graph = nx.Graph()
         self.Graph.add_edges_from(G.edges)
@@ -135,6 +138,17 @@ class FilteredGraph:
                                 )
 
     def compute_ECP(self):
+        """Euler Characteristic Profile
+
+        Euler characteristic profile at degree z is the difference
+        (number of vertices alive at z) - (number of edges alive at z).
+        Only works for 1-critical filtrations for now.
+
+        Returns
+        -------
+        list
+            list of tuples of (degree, contribution)
+        """
         ECP = dict()
 
         for node in self.Graph.nodes():
@@ -156,6 +170,14 @@ class FilteredGraph:
         return sorted(list(ECP.items()), key=lambda x: x[0])
     
     def rivet_bifiltration(self):
+        """translate to RIVET's bifiltration format
+        
+
+        Returns
+        -------
+        rivet.Bifiltration
+            The rivet representation of this FilteredGraph
+        """
         simplices = []
         appearances = []
         for node in self.Graph.nodes:
@@ -173,21 +195,75 @@ class FilteredGraph:
                               xreverse=self.xreverse)
 
     def compute_bipersistence(self, dim =0, x=0, y=0):
+        """Call RIVET to compute bipersistence
+
+        Coarsening specified by parameters x, y; see RIVET's documentation for further information.
+
+        Parameters
+        ----------
+        dim : int, optional
+            dimension of the homology to compute, by default 0
+        x : int, optional
+            coarsening in x direction, by default 0
+        y : int, optional
+            coarsening in y direction, by default 0
+
+        Returns
+        -------
+        rivet.Betti
+            A rivet.Betti object representing the bipersistence module
+        """
         self.betti = rivet.betti(self.rivet_bifiltration(),homology=dim, x=x,y=y)
         return self.betti
     
     def graded_rank(self):
+        """Multigraded Betti numbers
+
+        Make sure you run compute_bipersistence first before calling this method.
+
+        Returns
+        -------
+        numpy.array
+            A numpy array of multigraded Betti numbers.
+        """
         if self.betti is None:
             print("compute bipersistence first!")
         else:
             return self.betti.graded_rank
 
     def hilbert_function(self):
+        """Hilbert function
+        
+        Make sure you run compute_bipersistence first before calling this method.
+
+
+        Returns
+        -------
+        numpy.array
+            numpy array with entries equal the dimension of the homology vector space in the respective degree
+        """
         return hilbert_distance.betti_to_splitmat(self.betti).mat
 
 
 
 def degree_filtration(G):
+    """filter by node degree
+
+    Sublevelset filtration using lower-star from degree as vertex values: endows G's vertices and edges with an "appearance".
+    To be used as a filtration_function when constructing a FilteredGraph
+    
+
+    Parameters
+    ----------
+    G : networkx.Graph
+        The graph to be filtered
+
+    Returns
+    -------
+    networkx.Graph
+        The input graph endowed with filtration
+        
+    """
     for n, degree in G.degree():
         G.nodes[n]["appearance"] = [(degree,)]
 
@@ -200,6 +276,23 @@ def degree_filtration(G):
 
 
 def in_out_degree_bifiltration(D):
+    """filter by in- and out-degree
+
+    Sublevelset bifiltration using lower-star from (indegree,outdegree) as vertex values: endows D's vertices and edges with an "appearance".
+
+    To be used as a filtration_function when constructing a FilteredGraph.
+
+
+    Parameters
+    ----------
+    D : networkx.Digraph
+        The digraph to be filtered.
+
+    Returns
+    -------
+    networkx.Digraph
+        The input digraph endowed with filtration
+    """
     for n in D.nodes:
         D.nodes[n]["appearance"] = (D.in_degree(n), D.out_degree(n))
 
@@ -212,6 +305,25 @@ def in_out_degree_bifiltration(D):
     return D
 
 def HKS_bifiltration(G, grid=np.linspace(0,10,101)):
+    """Heat kernel signature bifiltration
+
+    At bidegree (h,t) consists of the subgraph whose vertices have at time t temparature at most h and all edges between them.
+    \infty-critical bifiltration.
+    To be used as a filtration_function when constructing a FilteredGraph.
+
+    
+    Parameters
+    ----------
+    G : networkx.Graph
+        The graph to be filtered
+    grid : _type_, optional
+        discretization of the time parameter, by default np.linspace(0,10,101)
+
+    Returns
+    -------
+    networkx.Graph
+        The input graph endowed with filtration
+    """
     L = nx.normalized_laplacian_matrix(G)
     values, vectors = np.linalg.eigh(L.A)
     for n in G.nodes:
@@ -222,6 +334,27 @@ def HKS_bifiltration(G, grid=np.linspace(0,10,101)):
     return G
 
 def product_bifiltration(G, G1, G2):
+    """product of two 1-filtrations
+
+    Assumes G1, G2 are two 1-critical 1-parameter-filtered versions of G.
+    The appearance of a simplex in the product bifiltration is the pair of appearances in the two input filtrations.
+    To be used as a filtration_function when constructing a FilteredGraph.
+    
+
+    Parameters
+    ----------
+    G : networkx.Graph
+        The graph to be filtered
+    G1 : FilteredGraph
+        1-critical 1-parameter-filtered version of G
+    G2 : FilteredGraph
+        1-critical 1-parameter-filtered verson of G
+
+    Returns
+    -------
+    networkx.Graph
+        The input graph endowed with filtration
+    """
     #if G != G1.Graph or G != G2.Graph:
     #    print("Error: not the same underlying graph")
     #    return
@@ -234,6 +367,29 @@ def product_bifiltration(G, G1, G2):
     return G
 
 def interlevel_bifiltration(G, FG, keep_nodes = True):
+    """interlevel bifiltration from 1-parameter sublevel filtration
+
+    Assumes FG is a sublevel-filtered version of G.
+    The interlevel set filtration at bidegree (x,y) consists of the subset whose wiltration values are in the interval [x,y].
+    This is in general not a graph; to fix this, one can either keep the node values fix and increase the appearance of the edges to make sure the endpoints are present,
+    or keep the edge values fix and set each node to appear whenever any of its incident edges appears.
+    To be used as a filtration_function when constructing a FilteredGraph.
+    Need to set xreverse=True in the FilteredGraph for sensible homology.
+
+    Parameters
+    ----------
+    G : networkx.Graph
+        The graph to be filtered
+    FG : FilteredGraph
+        A sublevel filtered version of G
+    keep_nodes : bool, optional
+        way to ensure the bifiltration consists of subgraphs. True->increase edge values; False->keep edge values, decrease node values, by default True
+
+    Returns
+    -------
+    networkx.Graph
+        The input graph endowed with filtration
+    """
     bifilG = nx.Graph()
     bifilG.add_edges_from(G.edges)
     if keep_nodes:#nodes appear on diagonal, edges as soon as both endpoints are present
@@ -258,6 +414,25 @@ def interlevel_bifiltration(G, FG, keep_nodes = True):
     return bifilG
 
 def hks(G, t):
+    """Heat kernel signature sublevel filtration
+
+
+    Sublevel filtration, consists at degree h of the subgraph whose vertices have temperature at most h at time fixed by input parameter t.
+    (and all edges between them.)
+    To be used as a filtration_function when constructing a FilteredGraph.
+
+    Parameters
+    ----------
+    G : networkx.Graph
+        The graph to be filtered
+    t : float
+        time
+
+    Returns
+    -------
+    networkx.Graph
+        The input graph endowed with filtration
+    """
     L = nx.normalized_laplacian_matrix(G)
     values, vectors = np.linalg.eigh(L.A)
     for n in G.nodes:
@@ -268,6 +443,25 @@ def hks(G, t):
     return G
 
 def lazy_random_walk_measure(G, alpha, u):
+    """probability distribution of randomly walking away from u
+    Starting at node u, stay there with probability alpha;
+    with probability (1-alpha)/deg(u) walk to any neighbor.
+    Used for Ollivier-Ricci curvature
+
+    Parameters
+    ----------
+    G : networkx.Graph
+        Graph on which the random walk  takes place
+    alpha : float
+        "laziness" parameter in [0,1] -- 0->always move away from u, 1->always stay at u
+    u : int
+        starting node
+
+    Returns
+    -------
+    numpy.array
+        array containing the probability of ending up at each node.
+    """
     values = np.zeros_like(G.nodes, dtype=float)
     values[u] = alpha
     for v in G.neighbors(u):
@@ -275,6 +469,26 @@ def lazy_random_walk_measure(G, alpha, u):
     return values
 
 def ollivier_ricci_curvature(G, alpha, reg = 0):
+    """ollivier-ricci curvature sublevel filtration
+    At degree z, consists of edges of curvature at most z and all incident nodes.
+    Curvature compares neighborhoods of the endpoints using Wasserstein distance of lazy random walk measures starting there.    
+    To be used as a filtration_function when constructing a FilteredGraph.
+
+    
+    Parameters
+    ----------
+    G : networkx.Graph
+        The graph to be filtered
+    alpha : float
+        laziness parameter for random walk measure
+    reg : float, optional
+        regularization parameter, 0->solve exactly, 1->solve Sinkhorn relaxation, by default 0
+
+    Returns
+    -------
+    networkx.Graph
+        The input graph endowed with filtration
+    """
     for v in G.nodes:
         G.nodes[v]["appearance"] = [(1000000,)]
 
@@ -298,6 +512,22 @@ def ollivier_ricci_curvature(G, alpha, reg = 0):
     return G
 
 def forman_ricci_curvature(G):
+    """Forman-Ricci curvature sublevel filtration
+    At degree z, consists of edges of curvature at most z and all incident nodes.
+    FRC((u,v)) = 4-deg(u)-deg(v)+3*|triangles|,
+    where triangles have u and v as two of their vertics.
+    To be used as a filtration_function when constructing a FilteredGraph.
+
+    Parameters
+    ----------
+    G : networkx.Graph
+        The graph to be filtered
+
+    Returns
+    -------
+    networkx.Graph
+        The input graph endowed with filtration
+    """
     for v in G.nodes:
         G.nodes[v]["appearance"] =[(-1,)]
 
