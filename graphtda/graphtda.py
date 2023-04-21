@@ -23,15 +23,14 @@ class FilteredGraph:
         **kwargs : dict
             arguments to be passed to the filtration_function.
         """
-        self.Graph = nx.Graph()
-        self.Graph.add_edges_from(G.edges)
+        self.Graph = G.copy(as_view=False)
         self.x_label = "x"
         self.y_label = "y"
         self.xreverse = False
 
         if filtration_function:
             self.Graph = filtration_function(self.Graph, **kwargs)
-        #else:
+        # else:
         #    self.Graph = G
 
         self.check_filtration()
@@ -168,10 +167,10 @@ class FilteredGraph:
             del ECP[key]
 
         return sorted(list(ECP.items()), key=lambda x: x[0])
-    
+
     def rivet_bifiltration(self):
         """translate to RIVET's bifiltration format
-        
+
 
         Returns
         -------
@@ -188,13 +187,15 @@ class FilteredGraph:
             simplices.append(list(edge))
             appearances.append(self.Graph.edges[edge]["appearance"])
 
-        return rivet.Bifiltration(x_label = self.x_label,
-                              y_label=self.y_label,
-                              simplices = simplices,
-                              appearances = appearances,
-                              xreverse=self.xreverse)
+        return rivet.Bifiltration(
+            x_label=self.x_label,
+            y_label=self.y_label,
+            simplices=simplices,
+            appearances=appearances,
+            xreverse=self.xreverse,
+        )
 
-    def compute_bipersistence(self, dim =0, x=0, y=0):
+    def compute_bipersistence(self, dim=0, x=0, y=0):
         """Call RIVET to compute bipersistence
 
         Coarsening specified by parameters x, y; see RIVET's documentation for further information.
@@ -213,9 +214,9 @@ class FilteredGraph:
         rivet.Betti
             A rivet.Betti object representing the bipersistence module
         """
-        self.betti = rivet.betti(self.rivet_bifiltration(),homology=dim, x=x,y=y)
+        self.betti = rivet.betti(self.rivet_bifiltration(), homology=dim, x=x, y=y)
         return self.betti
-    
+
     def graded_rank(self):
         """Multigraded Betti numbers
 
@@ -233,7 +234,7 @@ class FilteredGraph:
 
     def hilbert_function(self):
         """Hilbert function
-        
+
         Make sure you run compute_bipersistence first before calling this method.
 
 
@@ -245,13 +246,12 @@ class FilteredGraph:
         return hilbert_distance.betti_to_splitmat(self.betti).mat
 
 
-
 def degree_filtration(G):
     """filter by node degree
 
     Sublevelset filtration using lower-star from degree as vertex values: endows G's vertices and edges with an "appearance".
     To be used as a filtration_function when constructing a FilteredGraph
-    
+
 
     Parameters
     ----------
@@ -262,7 +262,7 @@ def degree_filtration(G):
     -------
     networkx.Graph
         The input graph endowed with filtration
-        
+
     """
     for n, degree in G.degree():
         G.nodes[n]["appearance"] = [(degree,)]
@@ -304,19 +304,20 @@ def in_out_degree_bifiltration(D):
 
     return D
 
-def HKS_bifiltration(G, grid=np.linspace(0,10,101)):
+
+def HKS_bifiltration(G, grid=np.linspace(0, 10, 101)):
     """Heat kernel signature bifiltration
 
     At bidegree (h,t) consists of the subgraph whose vertices have at time t temparature at most h and all edges between them.
     \infty-critical bifiltration.
     To be used as a filtration_function when constructing a FilteredGraph.
 
-    
+
     Parameters
     ----------
     G : networkx.Graph
         The graph to be filtered
-    grid : _type_, optional
+    grid : list or numpy.array, optional
         discretization of the time parameter, by default np.linspace(0,10,101)
 
     Returns
@@ -325,13 +326,31 @@ def HKS_bifiltration(G, grid=np.linspace(0,10,101)):
         The input graph endowed with filtration
     """
     L = nx.normalized_laplacian_matrix(G)
-    values, vectors = np.linalg.eigh(L.A)
+    values, vectors = np.linalg.eigh(L.todense())
     for n in G.nodes:
-        G.nodes[n]["appearance"] = [(sum([np.exp(-t*values[i])*vectors[i][n]**2 for i in range(len(values))]),t) for t in grid]
-    for u,v in G.edges:
-        G.edges[u, v]["appearance"] = [(max([G.nodes[u]["appearance"][i][0],G.nodes[v]["appearance"][i][0]]),grid[i]) for i in range(len(grid))]
+        G.nodes[n]["appearance"] = [
+            (
+                sum(
+                    [
+                        np.exp(-t * values[i]) * vectors[i][n] ** 2
+                        for i in range(len(values))
+                    ]
+                ),
+                t,
+            )
+            for t in grid
+        ]
+    for u, v in G.edges:
+        G.edges[u, v]["appearance"] = [
+            (
+                max([G.nodes[u]["appearance"][i][0], G.nodes[v]["appearance"][i][0]]),
+                grid[i],
+            )
+            for i in range(len(grid))
+        ]
 
     return G
+
 
 def product_bifiltration(G, G1, G2):
     """product of two 1-filtrations
@@ -339,7 +358,7 @@ def product_bifiltration(G, G1, G2):
     Assumes G1, G2 are two 1-critical 1-parameter-filtered versions of G.
     The appearance of a simplex in the product bifiltration is the pair of appearances in the two input filtrations.
     To be used as a filtration_function when constructing a FilteredGraph.
-    
+
 
     Parameters
     ----------
@@ -355,18 +374,29 @@ def product_bifiltration(G, G1, G2):
     networkx.Graph
         The input graph endowed with filtration
     """
-    #if G != G1.Graph or G != G2.Graph:
+    # if G != G1.Graph or G != G2.Graph:
     #    print("Error: not the same underlying graph")
     #    return
     for n in G.nodes:
-        G.nodes[n]["appearance"] = [(G1.Graph.nodes[n]["appearance"][0][0],G2.Graph.nodes[n]["appearance"][0][0])]
-    
+        G.nodes[n]["appearance"] = [
+            (
+                G1.Graph.nodes[n]["appearance"][0][0],
+                G2.Graph.nodes[n]["appearance"][0][0],
+            )
+        ]
+
     for e in G.edges:
-        G.edges[e]["appearance"] = [(G1.Graph.edges[e]["appearance"][0][0],G2.Graph.edges[e]["appearance"][0][0])]
+        G.edges[e]["appearance"] = [
+            (
+                G1.Graph.edges[e]["appearance"][0][0],
+                G2.Graph.edges[e]["appearance"][0][0],
+            )
+        ]
 
     return G
 
-def interlevel_bifiltration(G, FG, keep_nodes = True):
+
+def interlevel_bifiltration(G, FG, keep_nodes=True):
     """interlevel bifiltration from 1-parameter sublevel filtration
 
     Assumes FG is a sublevel-filtered version of G.
@@ -392,26 +422,38 @@ def interlevel_bifiltration(G, FG, keep_nodes = True):
     """
     bifilG = nx.Graph()
     bifilG.add_edges_from(G.edges)
-    if keep_nodes:#nodes appear on diagonal, edges as soon as both endpoints are present
+    if (
+        keep_nodes
+    ):  # nodes appear on diagonal, edges as soon as both endpoints are present
         for n in G.nodes:
-            bifilG.nodes[n]["appearance"] = [(FG.Graph.nodes[n]["appearance"][0][0],FG.Graph.nodes[n]["appearance"][0][0])]
-
+            bifilG.nodes[n]["appearance"] = [
+                (
+                    FG.Graph.nodes[n]["appearance"][0][0],
+                    FG.Graph.nodes[n]["appearance"][0][0],
+                )
+            ]
 
         for e in G.edges:
             vals = [FG.Graph.nodes[e[i]]["appearance"][0][0] for i in range(2)]
-            bifilG.edges[e]["appearance"] = [(min(vals),max(vals))]
+            bifilG.edges[e]["appearance"] = [(min(vals), max(vals))]
 
-    else:#edges appear on the diagonal, nodes as soon as required for edge
+    else:  # edges appear on the diagonal, nodes as soon as required for edge
         for e in G.edges:
-            bifilG.edges[e]["appearance"] = [(FG.Graph.edges[e]["appearance"][0][0],FG.Graph.edges[e]["appearance"][0][0])]
+            bifilG.edges[e]["appearance"] = [
+                (
+                    FG.Graph.edges[e]["appearance"][0][0],
+                    FG.Graph.edges[e]["appearance"][0][0],
+                )
+            ]
 
         for n in G.nodes:
             vals = set()
-            for e in nx.edges(G,n):
+            for e in nx.edges(G, n):
                 vals.add(FG.Graph.edges[e]["appearance"][0][0])
-            bifilG.nodes[n]["appearance"] = [(val,val) for val in vals]
+            bifilG.nodes[n]["appearance"] = [(val, val) for val in vals]
 
     return bifilG
+
 
 def hks(G, t):
     """Heat kernel signature sublevel filtration
@@ -434,13 +476,26 @@ def hks(G, t):
         The input graph endowed with filtration
     """
     L = nx.normalized_laplacian_matrix(G)
-    values, vectors = np.linalg.eigh(L.A)
+    values, vectors = np.linalg.eigh(L.todense())
+
     for n in G.nodes:
-        G.nodes[n]["appearance"] = [(sum([np.exp(-t*values[i])*vectors[i][n]**2 for i in range(len(values))]),)]
-    for u,v in G.edges:
-        G.edges[u, v]["appearance"] = [(max([G.nodes[u]["appearance"][0][0],G.nodes[v]["appearance"][0][0]]),)]
+        G.nodes[n]["appearance"] = [
+            (
+                sum(
+                    [
+                        np.exp(-t * values[i]) * vectors[i][n] ** 2
+                        for i in range(len(values))
+                    ]
+                ),
+            )
+        ]
+    for u, v in G.edges:
+        G.edges[u, v]["appearance"] = [
+            (max([G.nodes[u]["appearance"][0][0], G.nodes[v]["appearance"][0][0]]),)
+        ]
 
     return G
+
 
 def lazy_random_walk_measure(G, alpha, u):
     """probability distribution of randomly walking away from u
@@ -465,16 +520,17 @@ def lazy_random_walk_measure(G, alpha, u):
     values = np.zeros_like(G.nodes, dtype=float)
     values[u] = alpha
     for v in G.neighbors(u):
-        values[v] = (1-alpha)/G.degree[u]
+        values[v] = (1 - alpha) / G.degree[u]
     return values
 
-def ollivier_ricci_curvature(G, alpha, reg = 0):
+
+def ollivier_ricci_curvature(G, alpha, reg=0):
     """ollivier-ricci curvature sublevel filtration
     At degree z, consists of edges of curvature at most z and all incident nodes.
-    Curvature compares neighborhoods of the endpoints using Wasserstein distance of lazy random walk measures starting there.    
+    Curvature compares neighborhoods of the endpoints using Wasserstein distance of lazy random walk measures starting there.
     To be used as a filtration_function when constructing a FilteredGraph.
 
-    
+
     Parameters
     ----------
     G : networkx.Graph
@@ -490,26 +546,44 @@ def ollivier_ricci_curvature(G, alpha, reg = 0):
         The input graph endowed with filtration
     """
     for v in G.nodes:
-        G.nodes[v]["appearance"] = [(1000000,)]
+        # default values on the nodes
+        G.nodes[v]["appearance"] = [(np.inf,)]
+
+    p = dict(nx.shortest_path_length(G))
 
     for e in G.edges:
-        M = np.zeros((len(G.nodes),len(G.nodes)))
-        p = dict(nx.shortest_path_length(G))
+        M = np.zeros((len(G.nodes), len(G.nodes)))
         for i in range(len(G.nodes)):
             for j in range(i):
-                M[i,j] = p[i][j]
-        M = M + M.T    
-        if reg ==0:
-            Wd = ot.emd2(lazy_random_walk_measure(G,alpha,e[0]), lazy_random_walk_measure(G, alpha, e[1]), M)
+                # if the two nodes are in different connected components the default value is np.inf
+                M[i, j] = p[i].get(j, np.inf)
+        M = M + M.T
+        if reg == 0:
+            Wd = ot.emd2(
+                lazy_random_walk_measure(G, alpha, e[0]),
+                lazy_random_walk_measure(G, alpha, e[1]),
+                M,
+            )
         else:
-            Wd = ot.bregman.sinkhorn(lazy_random_walk_measure(G,alpha,e[0]), lazy_random_walk_measure(G, alpha, e[1]), M, reg)
-        G.edges[e]["appearance"] = [(1-Wd,)]
-        if 1-Wd < G.nodes[e[0]]["appearance"][0][0]:
-            G.nodes[e[0]]["appearance"] = [(1-Wd,)]
-        if 1-Wd < G.nodes[e[1]]["appearance"][0][0]:
-            G.nodes[e[1]]["appearance"] = [(1-Wd,)]
+            Wd = ot.bregman.sinkhorn(
+                lazy_random_walk_measure(G, alpha, e[0]),
+                lazy_random_walk_measure(G, alpha, e[1]),
+                M,
+                reg,
+            )
+        G.edges[e]["appearance"] = [(1 - Wd,)]
+        if 1 - Wd < G.nodes[e[0]]["appearance"][0][0]:
+            G.nodes[e[0]]["appearance"] = [(1 - Wd,)]
+        if 1 - Wd < G.nodes[e[1]]["appearance"][0][0]:
+            G.nodes[e[1]]["appearance"] = [(1 - Wd,)]
+
+    # if some node still has value +inf, it means that it is isolated, so we set its value to -1
+    for v in G.nodes:
+        if G.nodes[v]["appearance"] == [(np.inf,)]:
+            G.nodes[v]["appearance"] = [(-1,)]
 
     return G
+
 
 def forman_ricci_curvature(G):
     """Forman-Ricci curvature sublevel filtration
@@ -529,10 +603,12 @@ def forman_ricci_curvature(G):
         The input graph endowed with filtration
     """
     for v in G.nodes:
-        G.nodes[v]["appearance"] =[(-1,)]
+        G.nodes[v]["appearance"] = [(-1,)]
 
     for e in G.edges:
-        n_triangles = len(set(G.neighbors(e[0]))&set(G.neighbors(e[1])))
-        G.edges[e]["appearance"] = [(4-G.degree[e[0]]-G.degree[e[1]]+3*n_triangles,)]
+        n_triangles = len(set(G.neighbors(e[0])) & set(G.neighbors(e[1])))
+        G.edges[e]["appearance"] = [
+            (4 - G.degree[e[0]] - G.degree[e[1]] + 3 * n_triangles,)
+        ]
 
     return G
