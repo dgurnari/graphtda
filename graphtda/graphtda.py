@@ -243,7 +243,7 @@ class FilteredGraph:
         numpy.array
             numpy array with entries equal the dimension of the homology vector space in the respective degree
         """
-        return hilbert_distance.betti_to_splitmat(self.betti).mat
+        return hilbert_distance.betti_to_splitmat(self.betti)
 
 
 def degree_filtration(G):
