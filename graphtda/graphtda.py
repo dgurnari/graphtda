@@ -217,20 +217,20 @@ class FilteredGraph:
         self.betti = rivet.betti(self.rivet_bifiltration(), homology=dim, x=x, y=y)
         return self.betti
 
-    def graded_rank(self):
-        """Multigraded Betti numbers
+    # def graded_rank(self):
+    #     """Multigraded Betti numbers
 
-        Make sure you run compute_bipersistence first before calling this method.
+    #     Make sure you run compute_bipersistence first before calling this method.
 
-        Returns
-        -------
-        numpy.array
-            A numpy array of multigraded Betti numbers.
-        """
-        if self.betti is None:
-            print("compute bipersistence first!")
-        else:
-            return self.betti.graded_rank
+    #     Returns
+    #     -------
+    #     numpy.array
+    #         A numpy array of multigraded Betti numbers.
+    #     """
+    #     if self.betti is None:
+    #         print("compute bipersistence first!")
+    #     else:
+    #         return self.betti.graded_rank
 
     def hilbert_function(self):
         """Hilbert function
