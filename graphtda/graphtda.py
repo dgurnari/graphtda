@@ -420,9 +420,7 @@ def interlevel_bifiltration(G, FG, keep_nodes=True):
     networkx.Graph
         The input graph endowed with filtration
     """
-    bifilG = nx.Graph()
-    bifilG.add_nodes_from(G.nodes)
-    bifilG.add_edges_from(G.edges)
+    bifilG = G.copy(as_view=False)
     if (
         keep_nodes
     ):  # nodes appear on diagonal, edges as soon as both endpoints are present
@@ -452,6 +450,8 @@ def interlevel_bifiltration(G, FG, keep_nodes=True):
             for e in nx.edges(G, n):
                 vals.add(FG.Graph.edges[e]["appearance"][0][0])
             bifilG.nodes[n]["appearance"] = [(val, val) for val in vals]
+            if len(vals) == 0:#isolated vertex
+                bifilG.nodes[n]["appearance"] = [(0, 0)]
 
     return bifilG
 
