@@ -421,6 +421,7 @@ def interlevel_bifiltration(G, FG, keep_nodes=True):
         The input graph endowed with filtration
     """
     bifilG = nx.Graph()
+    bifilG.add_nodes_from(G.nodes)
     bifilG.add_edges_from(G.edges)
     if (
         keep_nodes
