@@ -166,6 +166,8 @@ class FilteredGraph:
         for key in to_del:
             del ECP[key]
 
+        if len(ECP) == 0:
+            ECP = {tuple([0 for _ in f]):0}
         return sorted(list(ECP.items()), key=lambda x: x[0])
 
     def rivet_bifiltration(self):
