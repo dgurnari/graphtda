@@ -163,6 +163,7 @@ texinfo_documents = [
 
 
 autodoc_mock_imports = [
+    "numpy",
     "pandas",
     "networkx",
     "numba",
