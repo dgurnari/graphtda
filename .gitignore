@@ -109,3 +109,4 @@ ENV/
 # datasets
 
 examples/datasets
+examples/.DS_Store
