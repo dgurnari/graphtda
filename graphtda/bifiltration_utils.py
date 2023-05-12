@@ -168,3 +168,35 @@ def difference_ECC(ecc1, ecc2, max_f):
         difference += abs(ec_1 - ec_2) * (filtration_steps[i] - filtration_steps[i-1])
 
     return difference
+
+
+
+import warnings
+
+def graded_rank_at_value(betti, x,y):
+    for i, this_x in enumerate(betti.dimensions.x_grades):
+        if this_x > x:
+            i -= 1
+            break
+
+    for j, this_y in enumerate(betti.dimensions.y_grades):
+        if this_y > y:
+            j -= 1
+            break
+
+    if j < 0 or i < 0:
+        return 0
+    return betti.graded_rank[j,i]
+
+def discretize_graded_rank(betti, x_grid, y_grid, idx=None):
+    betti_grid = np.zeros((len(x_grid), len(y_grid)))
+
+    try:
+        for i, x in enumerate(x_grid):
+            for j, y in enumerate(y_grid):
+                betti_grid[i,j] = graded_rank_at_value(betti, x, y)
+    except:
+        warnings.warn('the graded rank is empty for graph {}'.format(idx))
+
+    # just to be consistent with pyRivet
+    return betti_grid.T
